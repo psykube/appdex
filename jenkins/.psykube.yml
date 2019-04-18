@@ -1,0 +1,71 @@
+version: 2
+type: StatefulSet
+name: jenkins-master
+replicas: 1
+
+roles:
+  - cluster_role: admin
+
+services:
+  gui:
+    type: ClusterIP
+    ports:
+      - http
+
+  discovery:
+    type: ClusterIP
+    ports:
+      - discovery
+
+  external-discovery:
+    type: LoadBalancer
+    ports:
+      - discovery
+
+{{ #env.MASTER_HOSTNAME }}
+ingress:
+  host: {{ env.MASTER_HOSTNAME }}
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-body-size: 8m
+{{ /env.MASTER_HOSTNAME }}
+
+volumes:
+  data: 100G
+
+security_context:
+  run_as_user: 1000
+  fs_group: 1000
+
+rollout:
+  partition: 0
+
+containers:
+  server:
+    image: jenkins/jenkins:2.172
+
+    healthcheck:
+      http: /login
+      initial_delay_seconds: 120
+      timeout_seconds: 180
+
+    readycheck:
+      http: /login
+      initial_delay_seconds: 120
+      timeout_seconds: 15
+
+    resources:
+      requests:
+        memory: 10Gi
+        cpu: 2000m
+
+    env:
+      JAVA_OPTS: '-Xms5g -Xmx10g -Dhudson.slaves.ChannelPinger.pingIntervalSeconds=120 -Dorg.jenkinsci.plugins.shortwspath.BUILD_PATH_LENGTH=256'
+
+    # Bind the volumes we created
+    volume_mounts:
+      data: /var/jenkins_home
+
+    # Expose the ports we need
+    ports:
+      http: 8080
+      discovery: 50000
